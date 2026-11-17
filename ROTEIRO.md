@@ -1,9 +1,11 @@
 # Roteiro do seminário (18/11), versão simplificada
 
-Notebook: `Agente_Rede_Simples.ipynb`. Suba no Colab e, **antes de entrar na sala**, rode
-*Ambiente de execução → Executar tudo*. A primeira vez baixa o LLM (cerca de 3 GB, 1 a 2 min).
-Se der problema de internet, mude `USAR_LLM = False` e o agente usa palavras-chave.
-Backup se o Colab cair: `Agente_Rede_Simples_executado.html` (já rodado).
+Notebook: `Agente_Rede_Simples` no Databricks, no Git folder `Users/gabriel.kpaz@gmail.com/ia-rede-simples`
+(repositório privado `gblzera/ia-rede-simples`). **Antes de entrar na sala**: abra o notebook, escolha
+**Serverless** e clique em **Run all** (cerca de 2 min). O LLM é o Llama 3.3 70B servido pelo
+workspace, sem chave no código. Se o modelo servido falhar, o agente usa palavras-chave sozinho.
+Backup se o Databricks cair: `Agente_Rede_Simples_executado.html` (execução de 17/11, tudo certo).
+O mesmo notebook também roda no Colab, e lá ele usa o Qwen2.5-1.5B.
 
 ---
 
@@ -41,7 +43,7 @@ Backup se o Colab cair: `Agente_Rede_Simples_executado.html` (já rodado).
 ## Fase 3: Agente com LLM (2,5 min), seção 4
 
 - Frase-chave: **"O LLM entende, o código confere, o A\* calcula e o LLM explica."**
-- LLM: Qwen2.5-1.5B, aberto, roda no Colab, **sem chave de API**.
+- LLM: Llama 3.3 70B servido no Databricks (no Colab, Qwen2.5-1.5B aberto). **Sem chave de API** no código.
 - Rode ao vivo a célula de demonstração e troque o pedido, por exemplo:
   `agente('do e-mail até o servidor de arquivos')`.
 - Mostre as 3 linhas impressas: 1. o que entendeu (JSON) · 2. o que a ferramenta devolveu ·
