@@ -118,7 +118,7 @@ md("""
 | Ações | ir para uma máquina vizinha (seguir uma seta) |
 | Transição | o invasor passa a estar na máquina de destino |
 | Objetivo | estar no `Banco de dados` |
-| Custo do passo | **horas de esforço**. Na Fase 1, uma tabela simples: `custo = 10 − cvss` |
+| Custo do passo | **pontos de dificuldade** (quanto maior, mais difícil). Na Fase 1, uma tabela simples: `custo = 10 − cvss` |
 
 **Heurística do A\\*** (ideia própria):
 `h(n) = (menor nº de saltos de n até o alvo) × (menor custo de passo da rede)`.
@@ -177,15 +177,15 @@ def busca(origem, alvo, custo, metodo='astar'):
 linhas = []
 for metodo in ['bfs', 'ucs', 'astar']:
     rota, c, n = busca('Internet', 'Banco de dados', custo_tabela, metodo)
-    linhas.append(dict(método=metodo, custo_horas=round(c, 1), nós_expandidos=n, rota=' → '.join(rota)))
+    linhas.append(dict(método=metodo, custo_pontos=round(c, 1), nós_expandidos=n, rota=' → '.join(rota)))
 pd.DataFrame(linhas)
 """)
 
 md("""
 **Leitura:**
-- A **BFS** acha o caminho com **menos saltos** (3 máquinas), mas ele custa 10,5 h. Ela erra porque
+- A **BFS** acha o caminho com **menos saltos** (3 máquinas), mas ele custa 10,5 pontos. Ela erra porque
   conta passos, e aqui cada passo custa diferente.
-- **Custo Uniforme** e **A\\*** acham a **mesma rota ótima**, de 9,0 h, com 5 máquinas: mais passos,
+- **Custo Uniforme** e **A\\*** acham a **mesma rota ótima**, de 9,0 pontos, com 5 máquinas: mais passos,
   porém mais fáceis.
 - Nesta rede de 12 máquinas o A\\* não chega a expandir menos nós, porque a rede é pequena e a
   heurística é conservadora. O ganho do A\\* aparece em redes grandes: no Marco 1, com até 800
@@ -194,7 +194,7 @@ md("""
 
 code("""
 rota_f1, custo_f1, _ = busca('Internet', 'Banco de dados', custo_tabela)
-desenhar([(rota_f1, '#1f77b4', f'Fase 1 (tabela): {custo_f1:.1f} h')], 'Fase 1: rota mais barata pela tabela')
+desenhar([(rota_f1, '#1f77b4', f'Fase 1 (tabela): {custo_f1:.1f} pontos')], 'Fase 1: rota mais barata pela tabela')
 """)
 
 md("""
@@ -202,14 +202,14 @@ md("""
 
 A tabela `10 − cvss` ignora firewall, MFA e atualização. Para aprender o custo real usamos um
 **histórico de 1.500 testes de invasão** (dados **sintéticos**, gerados por código e documentados
-abaixo): cada linha é um passo testado, com as 4 características e as **horas reais** gastas.
+abaixo): cada linha é um passo testado, com as 4 características e a **dificuldade real** medida, em pontos.
 
 Comparamos dois modelos vistos na disciplina, com divisão treino/teste 80/20:
 **Regressão Linear** × **Árvore de Decisão**. A linha de base é a própria tabela da Fase 1.
 """)
 
 code("""
-def horas_reais(cvss, firewall, mfa, dias, ruido=True):
+def dificuldade_real(cvss, firewall, mfa, dias, ruido=True):
     # "Verdade" escondida usada só para gerar o histórico (o modelo não a conhece)
     h = (10 - cvss) * (1 + 0.8 * firewall) * (1 + 1.5 * mfa) * (1 - min(dias, 365) / 500)
     return h * (np.random.uniform(0.85, 1.15) if ruido else 1)
@@ -221,7 +221,7 @@ dados = pd.DataFrame({
     'mfa': np.random.randint(0, 2, N),
     'dias_sem_patch': np.random.randint(0, 400, N),
 })
-dados['horas'] = [horas_reais(*r) for r in dados[['cvss', 'firewall', 'mfa', 'dias_sem_patch']].values]
+dados['dificuldade'] = [dificuldade_real(*r) for r in dados[['cvss', 'firewall', 'mfa', 'dias_sem_patch']].values]
 dados.head()
 """)
 
@@ -231,7 +231,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.metrics import mean_absolute_error
 
-X, y = dados[['cvss', 'firewall', 'mfa', 'dias_sem_patch']], dados['horas']
+X, y = dados[['cvss', 'firewall', 'mfa', 'dias_sem_patch']], dados['dificuldade']
 X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=0.2, random_state=42)
 
 modelos = {'Regressão Linear': LinearRegression(),
@@ -240,10 +240,10 @@ erros = {'Tabela (10 − cvss)': mean_absolute_error(y_te, 10 - X_te['cvss'])}
 for nome, m in modelos.items():
     m.fit(X_tr, y_tr)
     erros[nome] = mean_absolute_error(y_te, m.predict(X_te))
-resultado = pd.DataFrame({'erro médio (horas)': erros}).round(2)
+resultado = pd.DataFrame({'erro médio (pontos)': erros}).round(2)
 display(resultado)
 resultado.plot.bar(legend=False, title='Erro médio absoluto no teste (menor é melhor)', rot=0, figsize=(7, 3.5))
-plt.ylabel('horas'); plt.show()
+plt.ylabel('pontos'); plt.show()
 """)
 
 md("""
@@ -261,9 +261,9 @@ def custo_aprendido(a):
 # A MESMA busca A* da Fase 1, agora com o custo aprendido
 rota_f2, custo_f2, _ = busca('Internet', 'Banco de dados', custo_aprendido)
 def real(rota):   # esforço verdadeiro (sem ruído) da rota, só para conferir
-    return sum(horas_reais(*REDE[a][b].values(), ruido=False) for a, b in zip(rota, rota[1:]))
-print('Fase 1 (tabela)   :', ' → '.join(rota_f1), f'| esforço real {real(rota_f1):.1f} h')
-print('Fase 2 (aprendido):', ' → '.join(rota_f2), f'| esforço real {real(rota_f2):.1f} h')
+    return sum(dificuldade_real(*REDE[a][b].values(), ruido=False) for a, b in zip(rota, rota[1:]))
+print('Fase 1 (tabela)   :', ' → '.join(rota_f1), f'| esforço real {real(rota_f1):.1f} pontos')
+print('Fase 2 (aprendido):', ' → '.join(rota_f2), f'| esforço real {real(rota_f2):.1f} pontos')
 desenhar([(rota_f1, '#1f77b4', 'Fase 1: tabela'), (rota_f2, '#d62728', 'Fase 2: custo aprendido')],
          'A rota muda quando o custo é aprendido')
 """)
@@ -378,9 +378,9 @@ def caminho_de_ataque(origem, alvo):
     \"\"\"FERRAMENTA: A* da Fase 1 sobre o custo aprendido da Fase 2.\"\"\"
     rota, c, _ = busca(origem, alvo, custo_aprendido)
     if rota is None: return {'existe': False}
-    passos = [dict(de=a, para=b, horas=round(custo_aprendido(REDE[a][b]), 1)) for a, b in zip(rota, rota[1:])]
-    mais_facil = min(passos, key=lambda p: p['horas'])
-    return {'existe': True, 'rota': rota, 'horas_total': round(c, 1), 'passos': passos,
+    passos = [dict(de=a, para=b, pontos=round(custo_aprendido(REDE[a][b]), 1)) for a, b in zip(rota, rota[1:])]
+    mais_facil = min(passos, key=lambda p: p['pontos'])
+    return {'existe': True, 'rota': rota, 'pontos_total': round(c, 1), 'passos': passos,
             'corrigir_primeiro': f"{mais_facil['de']} → {mais_facil['para']}"}
 
 def agente(pedido, mostrar=True):
@@ -397,12 +397,12 @@ def agente(pedido, mostrar=True):
         texto = f'Não existe caminho de {origem} até {alvo} nesta rede.'
     elif llm is not None:
         texto = conversar('Você é analista de segurança. Explique em até 3 frases, em português, '
-                          'dizendo a rota, o total de horas e o passo que deve ser corrigido primeiro (corrigir_primeiro). '
+                          'dizendo a rota, o total de pontos de dificuldade e o passo que deve ser corrigido primeiro (corrigir_primeiro). '
                           'Use SOMENTE os números do resultado. Não invente números.',
                           f'Pedido: {pedido}\\nResultado da ferramenta: {json.dumps(r, ensure_ascii=False)}')
     else:
         texto = (f"O caminho mais fácil de {origem} até {alvo} é {' → '.join(r['rota'])}, "
-                 f"com cerca de {r['horas_total']} horas de esforço. Corrija primeiro {r['corrigir_primeiro']}.")
+                 f"com cerca de {r['pontos_total']} pontos de dificuldade. Corrija primeiro {r['corrigir_primeiro']}.")
     if mostrar: print('3. Resposta:', texto)
     return {'origem': origem, 'alvo': alvo, 'resultado': r}
 
