@@ -1,6 +1,6 @@
 # Roteiro do seminário (18/11), versão simplificada
 
-Notebook: `Agente_Rede_Simples` no Databricks, no Git folder `Users/gabriel.kpaz@gmail.com/ia-rede-simples-final` (a pasta antiga `ia-rede-simples` ficou com a versão anterior)
+Notebook: `Agente_Rede_Simples` no Databricks, no Git folder `Users/gabriel.kpaz@gmail.com/ia-rede-simples-v3` (a pasta antiga `ia-rede-simples` ficou com a versão anterior)
 (repositório privado `gblzera/ia-rede-simples`). **Antes de entrar na sala**: abra o notebook, escolha
 **Serverless** e clique em **Run all** (cerca de 2 min). O LLM é o Llama 3.3 70B servido pelo
 workspace, sem chave no código. Se o modelo servido falhar, o agente usa palavras-chave sozinho.
