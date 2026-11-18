@@ -41,3 +41,11 @@ Por que o limite de 3 passos? Para o agente não girar para sempre se ficar pedi
 
 Dados sintéticos, só 12 máquinas, LLM pode errar mas o código valida, sem dados pessoais (LGPD),
 uso defensivo, sem chave no código, IA generativa usada como apoio.
+
+## 6. Acrescentado em 18/11, 17h (itens do enunciado que faltavam)
+
+- **Três redes de tamanhos diferentes** (seção 2, experimento): 12, 150 e 800 máquinas. Nós expandidos: média UCS 119 × A\* 88; grande UCS 689 × A\* 627. Custo igual (ótimo), BFS sempre mais cara (36,4 e 85 pontos contra 30,1 e 68).
+- **Pré-processamento:** 5% de `dias_sem_patch` faltando → mediana (SimpleImputer); normalização com StandardScaler na regressão; firewall e MFA já são 0/1.
+- **Validação cruzada (5 partes):** regressão 1,90 ± 0,15; árvore 0,76 ± 0,05.
+- **Onde erra mais:** passos com MFA e cvss baixo (erro ~1,1 ponto), porque são os mais difíceis e o ruído é proporcional.
+- **Tempo por pergunta do agente:** coluna `segundos` na avaliação.

@@ -188,8 +188,60 @@ md("""
 - **Custo Uniforme** e **A\\*** acham a **mesma rota ótima**, de 9,0 pontos, com 5 máquinas: mais passos,
   porém mais fáceis.
 - Nesta rede de 12 máquinas o A\\* não chega a expandir menos nós, porque a rede é pequena e a
-  heurística é conservadora. O ganho do A\\* aparece em redes grandes: no Marco 1, com até 800
-  estados, ele expandiu de 2,4 a 7,5 vezes menos nós que o Custo Uniforme.
+  heurística é conservadora. Por isso o experimento abaixo repete a comparação em **três redes de
+  tamanhos diferentes**.
+""")
+
+md("""
+### Experimento: três redes de tamanhos diferentes
+
+O enunciado pede a comparação em pelo menos três mapas. Usamos a rede da empresa (12 máquinas) e duas
+redes geradas por código, com 150 e 800 máquinas, organizadas em camadas (da Internet até o banco de
+dados), com as mesmas 4 características em cada seta. Para cada rede e cada método medimos
+**nós expandidos**, **custo da rota** e **tempo de execução**.
+""")
+
+code("""
+import time
+def gerar_rede(n, semente):
+    rng = np.random.default_rng(semente)
+    camadas = max(4, int(round(n ** 0.5)))
+    internos = [f'M{i}' for i in range(n - 2)]
+    grupos = [['Internet']] + [list(g) for g in np.array_split(internos, camadas)] + [['Banco de dados']]
+    rede = {m: {} for g in grupos for m in g}
+    def seta():
+        return dict(cvss=round(float(rng.uniform(3, 8)), 1), firewall=int(rng.integers(0, 2)),
+                    mfa=int(rng.integers(0, 2)), dias_sem_patch=int(rng.integers(0, 400)))
+    for i in range(len(grupos) - 1):
+        for m in grupos[i]:
+            prox = grupos[i + 1]
+            for v in rng.choice(prox, size=min(3, len(prox)), replace=False): rede[m][str(v)] = seta()
+            if rng.random() < 0.3 and i + 2 < len(grupos):   # atalho que pula uma camada
+                rede[m][str(rng.choice(grupos[i + 2]))] = seta()
+    return rede
+
+REDE_EMPRESA = REDE
+experimento = []
+for nome, rede in [('pequena (12)', REDE_EMPRESA), ('média (150)', gerar_rede(150, 1)), ('grande (800)', gerar_rede(800, 2))]:
+    REDE = rede                      # a mesma função busca passa a usar esta rede
+    for metodo in ['bfs', 'ucs', 'astar']:
+        t0 = time.perf_counter()
+        rota, c, n = busca('Internet', 'Banco de dados', custo_tabela, metodo)
+        experimento.append(dict(rede=nome, máquinas=len(rede), método=metodo, nós_expandidos=n,
+                                custo_pontos=round(c, 1), tempo_ms=round((time.perf_counter() - t0) * 1000, 2)))
+REDE = REDE_EMPRESA                  # volta para a rede da empresa
+experimento = pd.DataFrame(experimento)
+display(experimento)
+fig, eixos = plt.subplots(1, 2, figsize=(12, 3.8))
+experimento.pivot(index='rede', columns='método', values='nós_expandidos').loc[['pequena (12)', 'média (150)', 'grande (800)']].plot.bar(ax=eixos[0], rot=0, title='Nós expandidos (menor é melhor)')
+experimento.pivot(index='rede', columns='método', values='custo_pontos').loc[['pequena (12)', 'média (150)', 'grande (800)']].plot.bar(ax=eixos[1], rot=0, title='Custo da rota em pontos (menor é melhor)')
+plt.tight_layout(); plt.show()
+""")
+
+md("""
+**Leitura do experimento:** Custo Uniforme e A\\* sempre acham o **mesmo custo ótimo** (a heurística é
+admissível); a BFS acha rotas mais caras, porque conta saltos e não pontos. Conforme a rede cresce, o
+A\\* expande **menos nós** que o Custo Uniforme, porque a heurística empurra a busca na direção do alvo.
 """)
 
 code("""
@@ -222,6 +274,9 @@ dados = pd.DataFrame({
     'dias_sem_patch': np.random.randint(0, 400, N),
 })
 dados['dificuldade'] = [dificuldade_real(*r) for r in dados[['cvss', 'firewall', 'mfa', 'dias_sem_patch']].values]
+# Dado real tem buracos: 5% dos registros vieram sem 'dias_sem_patch'
+dados.loc[np.random.rand(N) < 0.05, 'dias_sem_patch'] = np.nan
+print('valores faltantes:', int(dados['dias_sem_patch'].isna().sum()))
 dados.head()
 """)
 
@@ -230,12 +285,22 @@ from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.metrics import mean_absolute_error
+from sklearn.model_selection import cross_val_score
+from sklearn.pipeline import make_pipeline
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler
 
+# Pré-processamento: faltante → mediana; normalização (média 0, desvio 1) para a regressão.
+# firewall e mfa já estão codificados como 0/1, então não precisam de outra codificação.
 X, y = dados[['cvss', 'firewall', 'mfa', 'dias_sem_patch']], dados['dificuldade']
 X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=0.2, random_state=42)
 
-modelos = {'Regressão Linear': LinearRegression(),
-           'Árvore de Decisão': DecisionTreeRegressor(max_depth=8, min_samples_leaf=5, random_state=42)}
+modelos = {'Regressão Linear': make_pipeline(SimpleImputer(strategy='median'), StandardScaler(), LinearRegression()),
+           'Árvore de Decisão': make_pipeline(SimpleImputer(strategy='median'),
+                                              DecisionTreeRegressor(max_depth=8, min_samples_leaf=5, random_state=42))}
+for nome, m in modelos.items():   # validação cruzada em 5 partes, só no treino
+    cv = -cross_val_score(m, X_tr, y_tr, cv=5, scoring='neg_mean_absolute_error')
+    print(f'{nome}: validação cruzada (5 partes) erro médio {cv.mean():.2f} ± {cv.std():.2f} pontos')
 erros = {'Tabela (10 − cvss)': mean_absolute_error(y_te, 10 - X_te['cvss'])}
 for nome, m in modelos.items():
     m.fit(X_tr, y_tr)
@@ -244,6 +309,17 @@ resultado = pd.DataFrame({'erro médio (pontos)': erros}).round(2)
 display(resultado)
 resultado.plot.bar(legend=False, title='Erro médio absoluto no teste (menor é melhor)', rot=0, figsize=(7, 3.5))
 plt.ylabel('pontos'); plt.show()
+
+# Onde a árvore erra mais? Erro médio por grupo no teste
+analise = X_te.copy(); analise['erro'] = abs(y_te - modelos['Árvore de Decisão'].predict(X_te))
+analise['faixa_cvss'] = pd.cut(analise['cvss'], [0, 5, 7, 10], labels=['baixo (<5)', 'médio (5-7)', 'alto (>7)'])
+display(analise.groupby(['mfa', 'faixa_cvss'], observed=True)['erro'].mean().round(2).unstack())
+""")
+
+md("""
+**Onde o modelo erra mais:** nos passos **com MFA e cvss baixo**, que são os mais difíceis (valores
+altos). Como o ruído é de ±15% do valor, quanto maior a dificuldade, maior o erro em pontos. Nos passos
+fáceis (cvss alto, sem MFA) o erro é pequeno.
 """)
 
 md("""
@@ -562,13 +638,16 @@ CASOS = [
 ]
 linhas = []
 for pergunta, esperada in CASOS:
+    t0 = time.perf_counter()
     r = agente(pergunta, mostrar=False)
+    segundos = time.perf_counter() - t0
     escolhida = r['ferramentas'][0] if r['ferramentas'] else None
     linhas.append(dict(pergunta=pergunta, esperada=esperada, escolhida=escolhida,
-                       acertou='✔' if escolhida == esperada else '✘'))
+                       acertou='✔' if escolhida == esperada else '✘', segundos=round(segundos, 1)))
 aval = pd.DataFrame(linhas)
 display(aval)
 print(f"Escolheu a ferramenta certa em {(aval.acertou == '✔').sum()} de {len(aval)} casos.")
+print(f"Tempo médio por pergunta: {aval.segundos.mean():.1f} s (cada pergunta faz de 1 a 3 chamadas ao LLM)")
 ''')
 
 md("""
